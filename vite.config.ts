@@ -1,6 +1,7 @@
-import { defineConfig } from 'vite'
-
-export default defineConfig({
-  // 仓库名必须完全一致，前后斜杠不能少
-  base: '/HEMIAO-KEEP/',
+export default defineConfig(() => {
+  return {
+    base: './', // 💡 新增这一行：支持 GitHub Pages 子路径部署
+    plugins: [react(), tailwindcss()],
+    ...
+  }
 })
