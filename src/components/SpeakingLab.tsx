@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Mic, 
@@ -13,7 +13,14 @@ import {
   Lightbulb,
   ArrowRight,
   User,
-  Activity
+  Activity,
+  Volume2,
+  Play,
+  Pause,
+  TrendingUp,
+  Check,
+  Flame,
+  Info
 } from "lucide-react";
 import { SpeakingScene, NoteItem, PracticeLog } from "../types";
 
@@ -40,11 +47,313 @@ export default function SpeakingLab({
   // Active review result state
   const [activeFeedback, setActiveFeedback] = useState<{
     score: number;
+    fluencyScore?: number;
+    intonationScore?: number;
     polishedVersion: string;
     encouragement: string;
     grammarErrors: Array<{ original: string; correction: string; reason: string }>;
     expressionsUsed: Array<{ expression: string; status: string; feedback: string }>;
+    fluencyFeedback?: string;
+    intonationFeedback?: string;
+    speechSuggestions?: string[];
   } | null>(null);
+
+  // Microphone and Speech Recognition refs/states
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechSupport, setSpeechSupport] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<any | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  // Check browser support for Web Speech API
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setSpeechSupport(true);
+    }
+  }, []);
+
+  // Cleanup all recording resources on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (audioContextRef.current) {
+        try { audioContextRef.current.close(); } catch (e) {}
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  // Gentle idle waveform animation on mount/idle
+  useEffect(() => {
+    if (isRecording) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let phase = 0;
+    let idleAnimationFrameId: number;
+
+    const drawIdle = () => {
+      if (!canvasRef.current || isRecording) return;
+      const width = canvas.width;
+      const height = canvas.height;
+
+      idleAnimationFrameId = requestAnimationFrame(drawIdle);
+
+      // Symmetrical clean background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+
+      const centerY = height / 2;
+      const barsCount = 45;
+      const barWidth = width / barsCount;
+
+      phase += 0.04;
+
+      for (let i = 0; i < barsCount; i++) {
+        const sinVal = Math.sin(i * 0.18 + phase);
+        const barHeight = (sinVal * 0.2 + 0.35) * centerY * 0.25; // short, gentle waves
+        
+        ctx.fillStyle = "#f1f5f9"; // slate-100
+
+        const barX = i * barWidth;
+        const barY = centerY - barHeight;
+        const barW = barWidth - 3;
+        const barH = barHeight * 2;
+
+        if (barW > 0 && barH > 0) {
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(barX, barY, barW, barH, barW / 2);
+          } else {
+            ctx.rect(barX, barY, barW, barH);
+          }
+          ctx.fill();
+        }
+      }
+    };
+
+    drawIdle();
+
+    return () => {
+      cancelAnimationFrame(idleAnimationFrameId);
+    };
+  }, [isRecording]);
+
+  const visualizeStream = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const analyser = analyserRef.current;
+    if (!analyser) return;
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      if (!canvasRef.current) return;
+      const width = canvas.width;
+      const height = canvas.height;
+
+      animationFrameRef.current = requestAnimationFrame(draw);
+
+      analyser.getByteFrequencyData(dataArray);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+
+      const barWidth = (width / bufferLength) * 2.8;
+      let barHeight;
+      let x = 0;
+      const centerY = height / 2;
+
+      for (let i = 0; i < bufferLength; i++) {
+        barHeight = (dataArray[i] / 255) * centerY * 0.95;
+        if (barHeight < 3) barHeight = 3;
+
+        const grad = ctx.createLinearGradient(0, centerY - barHeight, 0, centerY + barHeight);
+        grad.addColorStop(0, "#c7d2fe"); // Indigo-200
+        grad.addColorStop(0.4, "#6366f1"); // Indigo-500
+        grad.addColorStop(1, "#10b981"); // Emerald-500
+
+        ctx.fillStyle = grad;
+
+        const radius = barWidth / 2;
+        const barX = x;
+        const barY = centerY - barHeight;
+        const barW = barWidth - 2;
+        const barH = barHeight * 2;
+
+        if (barW > 0 && barH > 0) {
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(barX, barY, barW, barH, radius);
+          } else {
+            ctx.rect(barX, barY, barW, barH);
+          }
+          ctx.fill();
+        }
+
+        x += barWidth;
+      }
+    };
+
+    draw();
+  };
+
+  const visualizeSimulatedStream = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let phase = 0;
+
+    const draw = () => {
+      if (!canvasRef.current) return;
+      const width = canvas.width;
+      const height = canvas.height;
+
+      animationFrameRef.current = requestAnimationFrame(draw);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+
+      const centerY = height / 2;
+      const barsCount = 45;
+      const barWidth = width / barsCount;
+
+      phase += 0.16;
+
+      for (let i = 0; i < barsCount; i++) {
+        const sinVal = Math.sin(i * 0.25 + phase);
+        const noise = Math.random() * 0.2 + 0.8;
+        let barHeight = (sinVal * 0.45 + 0.55) * centerY * 0.8 * noise;
+        if (barHeight < 4) barHeight = 4;
+
+        const grad = ctx.createLinearGradient(0, centerY - barHeight, 0, centerY + barHeight);
+        grad.addColorStop(0, "#a5b4fc"); // indigo-300
+        grad.addColorStop(0.5, "#4f46e5"); // indigo-600
+        grad.addColorStop(1, "#10b981"); // emerald-500
+
+        ctx.fillStyle = grad;
+
+        const barX = i * barWidth;
+        const barY = centerY - barHeight;
+        const barW = barWidth - 2;
+        const barH = barHeight * 2;
+
+        if (barW > 0 && barH > 0) {
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(barX, barY, barW, barH, barW / 2);
+          } else {
+            ctx.rect(barX, barY, barW, barH);
+          }
+          ctx.fill();
+        }
+      }
+    };
+
+    draw();
+  };
+
+  const startRecording = async () => {
+    try {
+      setInterimTranscript("");
+      setIsRecording(true);
+
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const rec = new SpeechRecognition();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = "en-US";
+
+        rec.onresult = (event: any) => {
+          let finalTranscript = "";
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interim += event.results[i][0].transcript;
+            }
+          }
+          if (finalTranscript) {
+            setUserAnswer(prev => prev + (prev ? " " : "") + finalTranscript);
+          }
+          setInterimTranscript(interim);
+        };
+
+        rec.onerror = (e: any) => {
+          console.error("Speech Recognition Error:", e);
+        };
+
+        rec.start();
+        recognitionRef.current = rec;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      audioContextRef.current = audioCtx;
+
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyserRef.current = analyser;
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      visualizeStream();
+    } catch (err: any) {
+      console.warn("Could not get microphone stream for visualizer, simulating visual wave...", err);
+      setIsRecording(true);
+      visualizeSimulatedStream();
+    }
+  };
+
+  const stopRecording = () => {
+    setIsRecording(false);
+    setInterimTranscript("");
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+      recognitionRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch (e) {}
+      audioContextRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+  };
 
   // Handle image-recognizer prefilled scene triggers
   useEffect(() => {
@@ -121,6 +430,8 @@ export default function SpeakingLab({
 
       const fallbackFeedback = {
         score: 88,
+        fluencyScore: 86,
+        intonationScore: 82,
         polishedVersion: userAnswer.replace(/i want to buy/gi, "I'd love to grab")
                                     .replace(/put less ice/gi, "go easy on the ice"),
         encouragement: "非常流畅的表达！思维链条把握很到位。继续保持这个势头，把同境词组合到一起表达效果更棒！",
@@ -131,7 +442,14 @@ export default function SpeakingLab({
             reason: "口语中直接说 'I want to buy' 显得极其死板中式，用 'Can I grab...' 或 'I will grab' 更加自然有烟火气。"
           }
         ],
-        expressionsUsed: simulatedExpressionsUsed
+        expressionsUsed: simulatedExpressionsUsed,
+        fluencyFeedback: "整体流利度表现出色，表达的连贯性较好。但在衔接不同意群时，可以尝试多使用类似 'Actually', 'I guess' 的过渡语来替代机械停顿。",
+        intonationFeedback: "重音基本落在核心动词/名词上，节奏感好。建议注意 'grab a' 的自然连读（/græbə/），以及在句子结尾陈述句型中保持标准的降调（falling tone），更显地道与自信。",
+        speechSuggestions: [
+          "意群连读优化：在说 'grab a coffee' 时，将 b 和 a 自然滑移拼读为 /græbə/，使语句听起来连贯生动。",
+          "节奏感弱读处理：将 to, for, at 等介词进行弱化（如 to 读作 /tə/），以便将重音突出在名词和动作上。",
+          "陈述语气降调：句尾采用坚定的降调（falling tone），符合母语发言习惯并建立更强的口语信心。"
+        ]
       };
 
       setActiveFeedback(fallbackFeedback);
@@ -251,21 +569,97 @@ export default function SpeakingLab({
               </div>
             )}
 
+            {/* Speaking Waveform Visualization & Recording Controller */}
+            <div className="bg-neutral-50/60 border border-neutral-200/50 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-neutral-500 font-mono tracking-wider uppercase flex items-center gap-1.5">
+                  <Volume2 className="w-3.5 h-3.5 text-indigo-500" />
+                  实时语音波形可视化 (LIVE WAVEFORM VISUALIZER)
+                </span>
+                {isRecording && (
+                  <span className="flex h-2.5 w-2.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                  </span>
+                )}
+              </div>
+
+              {/* Canvas element for real-time waveform */}
+              <div className="relative">
+                <canvas 
+                  ref={canvasRef} 
+                  width={600} 
+                  height={120} 
+                  className="w-full h-24 bg-white border border-neutral-200/40 rounded-xl shadow-3xs transition-all duration-300"
+                />
+                {!isRecording && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/5 backdrop-blur-3xs pointer-events-none">
+                    <span className="text-[10px] text-neutral-400 font-mono tracking-wide bg-white/90 px-2 py-1 rounded-md border border-neutral-100">
+                      麦克风静音中 • 准备口语练耳
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Interim Speech Transcription Live Preview */}
+              {isRecording && interimTranscript && (
+                <div className="p-3 bg-indigo-50/20 border border-indigo-100/30 rounded-xl">
+                  <span className="text-[8.5px] font-bold text-indigo-500 font-mono uppercase tracking-wider block mb-1">
+                    实时语音识别预览 (Speech-to-Text Preview)
+                  </span>
+                  <p className="text-xs text-indigo-800 italic leading-relaxed font-light">
+                    "{interimTranscript}..."
+                  </p>
+                </div>
+              )}
+
+              {/* Mic Controls */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-neutral-100">
+                <div className="text-[10.5px] text-neutral-400 font-light max-w-sm">
+                  {speechSupport ? (
+                    <span>已集成 Web STT 引擎。开启麦克风大声朗读，系统将实时进行英文转写和波形采集。</span>
+                  ) : (
+                    <span>您的浏览器暂不支持 Speech-to-Text，但仍能通过语音波形观察语速和发音力度。</span>
+                  )}
+                </div>
+
+                {!isRecording ? (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100/80 text-indigo-600 rounded-xl text-[11px] font-semibold transition-all flex items-center gap-1.5 shadow-3xs hover:scale-102 shrink-0 cursor-pointer"
+                  >
+                    <Mic className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+                    <span>开启麦克风口语练习</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-[11px] font-semibold transition-all flex items-center gap-1.5 shadow-sm hover:scale-102 shrink-0 cursor-pointer animate-pulse"
+                  >
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                    <span>结束录音并生成文本</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Speaking text input area */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[10px] font-semibold tracking-wider text-neutral-400 uppercase block">
-                  2. 输入您的口语回答 (USER RESPONSE)
+                  2. 确认并微调您的口语回答文本 (VERIFY USER RESPONSE)
                 </label>
                 <span className="text-[9px] font-mono text-neutral-400">
-                  字符数: {userAnswer.length}
+                  字数: {userAnswer.length}
                 </span>
               </div>
               
               <textarea
-                rows={6}
+                rows={5}
                 required
-                placeholder="在此处输入您的口语练习文本（或利用您手机/电脑的自带键盘语音输入法录入)..."
+                placeholder="在上方点击[开启麦克风口语练习]并朗读，或直接在此处输入您的口语回答句子..."
                 value={userAnswer}
                 onChange={e => setUserAnswer(e.target.value)}
                 className="w-full px-4 py-3 bg-neutral-50 hover:bg-neutral-100/40 focus:bg-white border border-neutral-200 focus:border-neutral-400 rounded-2xl text-[12px] focus:outline-hidden transition-all font-light leading-relaxed resize-none"
@@ -421,6 +815,87 @@ export default function SpeakingLab({
                         🎉 极佳！没有发现明显的严重语法或中式硬套错误，表达非常利落。
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Speech Fluency & Intonation Analysis Block */}
+                <div className="space-y-3.5 border-t border-b border-neutral-100 py-4.5">
+                  <span className="text-[10px] font-bold text-neutral-400 font-mono block tracking-wider uppercase flex items-center gap-1.5">
+                    <Activity className="w-4 h-4 text-indigo-500 animate-pulse" />
+                    🎙️ AI 语音流利度与语调诊断 (FLUENCY & INTONATION)
+                  </span>
+
+                  {/* Twin Score Gauges */}
+                  <div className="grid grid-cols-2 gap-3.5">
+                    {/* Fluency Gauge */}
+                    <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-3 text-center space-y-1.5">
+                      <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500">
+                        <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>流利度评分</span>
+                      </div>
+                      <div className="text-xl font-bold font-mono text-indigo-600">
+                        {activeFeedback.fluencyScore || 85} <span className="text-[10px] text-neutral-400">/100</span>
+                      </div>
+                      <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-indigo-600 h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${activeFeedback.fluencyScore || 85}%` }} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Intonation Gauge */}
+                    <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-3 text-center space-y-1.5">
+                      <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500">
+                        <Volume2 className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>语调与节奏</span>
+                      </div>
+                      <div className="text-xl font-bold font-mono text-emerald-600">
+                        {activeFeedback.intonationScore || 80} <span className="text-[10px] text-neutral-400">/100</span>
+                      </div>
+                      <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${activeFeedback.intonationScore || 80}%` }} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Feedback description cards */}
+                  <div className="space-y-2 text-xs leading-relaxed">
+                    <div className="p-3 bg-indigo-50/10 border border-indigo-100/20 rounded-xl space-y-0.5">
+                      <span className="text-[10px] font-semibold text-indigo-700 block">🗣️ 流利度深度诊断 (Fluency Diagnostic)</span>
+                      <p className="text-neutral-600 font-light text-[11.5px] leading-relaxed">
+                        {activeFeedback.fluencyFeedback || "整体流利度表现良好，语速控制平稳。建议在遇到脑内构思或转换衔接时，多使用如 'You see', 'Basically' 等过渡性词汇，避免长久停顿。"}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50/10 border border-emerald-100/20 rounded-xl space-y-0.5">
+                      <span className="text-[10px] font-semibold text-emerald-700 block">🎵 语调与音律诊断 (Intonation Diagnostic)</span>
+                      <p className="text-neutral-600 font-light text-[11.5px] leading-relaxed">
+                        {activeFeedback.intonationFeedback || "发音和元音饱满度很好，核心重音抓得精准。建议注意短元音弱化和辅音连读（如 'can I' 连读为 /kænaɪ/），保持句尾升降音自然过渡。"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actionable Speech Suggestions list */}
+                  <div className="space-y-2 pt-1">
+                    <span className="text-[10px] font-semibold text-neutral-500 block">🛠️ 科学发音提分行动点 (Actionable Suggestions)</span>
+                    <ul className="space-y-1.5">
+                      {(activeFeedback.speechSuggestions || [
+                        "意群连读优化：在说 'grab a coffee' 时，将 b 和 a 自然滑移拼读为 /græbə/，使语句听起来连贯生动。",
+                        "节奏感弱读处理：将 to, for, at 等介词进行弱化（如 to 读作 /tə/），以便将重音突出在名词和动作上。",
+                        "陈述语气降调：句尾采用坚定的降调（falling tone），符合母语发言习惯并建立更强的口语信心。"
+                      ]).map((sug, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-[11.5px] text-neutral-600 font-light leading-relaxed">
+                          <span className="h-4.5 w-4.5 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600 flex-shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span>{sug}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
 

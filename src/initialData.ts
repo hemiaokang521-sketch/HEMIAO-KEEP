@@ -7,7 +7,8 @@ export const INITIAL_SCENES: SpeakingScene[] = [
     category: "Daily",
     thinkingChainType: "descriptive",
     thinkingChainDescription: "描述类思维链：场景背景 (Spotting the barista, noisy morning vibe) → 细节动作 (Grab a drink, customize sweetness/ice) → 个人感受 (That caffeine kick to jumpstart the day).",
-    speakingPracticePrompt: "Describe your typical morning routine at a local coffee shop. How do you custom-order your favorite caffeine kick, and how does it make you feel?"
+    speakingPracticePrompt: "Describe your typical morning routine at a local coffee shop. How do you custom-order your favorite caffeine kick, and how does it make you feel?",
+    tags: ["日常", "地道表达", "咖啡馆"]
   },
   {
     id: "scene_2",
@@ -15,7 +16,8 @@ export const INITIAL_SCENES: SpeakingScene[] = [
     category: "Business",
     thinkingChainType: "interactive",
     thinkingChainDescription: "交流类思维链：回应核心 (Express excitement & show warmth) → 补充细节 (Pitch 1 sentence of your core strength) → 抛回话题 (Ask about the interviewer's availability).",
-    speakingPracticePrompt: "An HR manager calls you for an unscheduled interview screener. How do you professionally introduce yourself, pitch your background, and politely schedule a longer call?"
+    speakingPracticePrompt: "An HR manager calls you for an unscheduled interview screener. How do you professionally introduce yourself, pitch your background, and politely schedule a longer call?",
+    tags: ["商务", "面试", "求职", "地道表达"]
   },
   {
     id: "scene_3",
@@ -23,7 +25,8 @@ export const INITIAL_SCENES: SpeakingScene[] = [
     category: "Social",
     thinkingChainType: "interactive",
     thinkingChainDescription: "交流类思维链：回应核心 (Politely acknowledge the other's point) → 补充细节 (Present your logic with a contrasting scenario) → 抛回话题 (Gently ask if they see your side).",
-    speakingPracticePrompt: "During a friendly dinner debate, someone says social media has completely ruined human relationships. How do you politely disagree and show a more balanced view?"
+    speakingPracticePrompt: "During a friendly dinner debate, someone says social media has completely ruined human relationships. How do you politely disagree and show a more balanced view?",
+    tags: ["社交", "日常", "地道表达", "沟通技巧"]
   }
 ];
 

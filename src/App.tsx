@@ -27,6 +27,7 @@ import NetExtractor from "./components/NetExtractor";
 import BookAnalyzer from "./components/BookAnalyzer";
 import CameraRecognizer from "./components/CameraRecognizer";
 import SpeakingLab from "./components/SpeakingLab";
+import DocExtractor from "./components/DocExtractor";
 
 export default function App() {
   const [activeSection, setActiveSection] = useState<string>("home");
@@ -96,6 +97,15 @@ export default function App() {
   const handleDeleteNote = (noteId: string) => {
     const updated = notes.filter(n => n.id !== noteId);
     saveNotes(updated);
+  };
+
+  const handleUpdateNotes = (updatedNotes: NoteItem[]) => {
+    saveNotes(updatedNotes);
+  };
+
+  const handleUpdateScene = (updatedScene: SpeakingScene) => {
+    const updated = scenes.map(s => s.id === updatedScene.id ? updatedScene : s);
+    saveScenes(updated);
   };
 
   const handleDeleteScene = (sceneId: string) => {
@@ -248,6 +258,8 @@ export default function App() {
                 onAddNote={handleAddNote}
                 onDeleteNote={handleDeleteNote}
                 onDeleteScene={handleDeleteScene}
+                onUpdateScene={handleUpdateScene}
+                onUpdateNotes={handleUpdateNotes}
               />
             )}
 
@@ -255,6 +267,14 @@ export default function App() {
               <NetExtractor 
                 onAddScene={handleAddScene} 
                 onAddNote={handleAddNote} 
+              />
+            )}
+
+            {activeSection === "document" && (
+              <DocExtractor 
+                onAddScene={handleAddScene} 
+                onAddNote={handleAddNote} 
+                onDirectToPractice={handleDirectToPractice}
               />
             )}
 

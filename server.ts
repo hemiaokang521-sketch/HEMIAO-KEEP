@@ -3,6 +3,8 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+// @ts-ignore
+import mammoth from "mammoth";
 
 dotenv.config();
 
@@ -155,7 +157,9 @@ The student received the following prompt: "${prompt}".
 The student answered: "${userAnswer}".
 The student is trying to utilize these accumulated expressions in their response: [${formattedExpressions}].
 
-Evaluate the answer and provide thorough, constructive "solid feedback" focusing on natural flow, colloquial correctness, and "de-templatized" speech.
+Evaluate the answer and provide thorough, constructive "solid feedback" focusing on natural flow, colloquial correctness, "de-templatized" speech, and oral delivery performance (fluency and intonation).
+Since this is an oral response, analyze their text for rhythm, chunking, potential pronunciation stumbling blocks, word-stress patterns, and tone patterns (rising/falling).
+
 Produce a JSON response with this exact structure:
 {
   "grammarErrors": [
@@ -174,6 +178,14 @@ Produce a JSON response with this exact structure:
   ],
   "polishedVersion": "An authentic, natural mother-tongue level rewrite of their answer, using simple high-frequency vocabulary rather than overly academic words",
   "score": 85, // out of 100
+  "fluencyScore": 88, // out of 100 representing oral delivery flow, coherence, and structural transitions
+  "intonationScore": 82, // out of 100 representing rhythm, sentence stress, weak forms, and tone pattern recommendations
+  "fluencyFeedback": "Detailed constructive analysis in Chinese about the user's speech coherence, transitions, and pacing suggestions.",
+  "intonationFeedback": "Detailed constructive analysis in Chinese about word stress, rhythm, chunking (意群划分), rising/falling intonation, and where to apply liaisons (连读).",
+  "speechSuggestions": [
+    "A specific, actionable pronunciation or delivery recommendation in Chinese",
+    "Another specific recommendation focusing on rhythm or connection of speech sounds"
+  ],
   "encouragement": "A supportive closing tip in Chinese reminding them of key memory associations or speaking habits"
 }
 Output raw stringified JSON only.`;
@@ -246,6 +258,150 @@ Return raw stringified JSON only. Ensure you have a central parent node and at l
   } catch (error: any) {
     console.error("Error in book-mindmap API:", error);
     res.status(500).json({ error: error.message || "Failed to generate mindmap" });
+  }
+});
+
+// 5. Intelligent Document/Image Content Extractor
+app.post("/api/gemini/analyze-document", async (req, res) => {
+  const { fileData, fileName, mimeType, personalLevel, noteHabit } = req.body;
+
+  if (!fileData) {
+    return res.status(400).json({ error: "File data is required" });
+  }
+
+  try {
+    let extractedText = "";
+    let isDocx = false;
+
+    // Check if it's a docx file that mammoth needs to process
+    if (
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      (fileName && fileName.endsWith(".docx"))
+    ) {
+      isDocx = true;
+      const buffer = Buffer.from(fileData, "base64");
+      const result = await mammoth.extractRawText({ buffer });
+      extractedText = result.value;
+    }
+
+    const ai = getGeminiClient();
+
+    let contents: any[] = [];
+
+    const systemPrompt = `You are a professional language acquisition AI. The user has uploaded their personal note document or screenshot of English notes.
+Your task is to:
+1. Extract the main note text.
+2. Group the notes into an elegant oral English speaking scenario (Scene). Categorize it as Daily, Business, Social, Academic, or Custom.
+3. Perform semantic analysis on the content and compute a match score (0-100) for each of our preset categories: Daily, Business, Social, Academic, Custom. Provide a professional classification reason in Chinese explaining why it is assigned to the selected category.
+4. Extract key collocations/expressions from the notes and "extend" them ("延展同境词") into authentic native collocations! For each expression, provide:
+   - "expression": the natural phrase or collocation
+   - "standard": a basic, literal, or slightly unnatural textbook phrasing of this concept (e.g., "I want to buy")
+   - "native": the authentic native alternative (e.g., "Can I grab a...") (地道 > 复杂)
+   - "memoryHook": a practical, witty mnemonic device (homophones, association 联想, etc.) in Chinese to remember it easily
+   - "example": a realistic example sentence in this scenario
+5. Generate 2-3 extra, highly valuable, and advanced co-contextual collocation suggestions ("同境词扩展建议") in the same scenario/category. They should not be directly in the original notes but are high-frequency words native speakers would use in this exact same context. Provide the same structure as step 4.
+6. Organize a mindmap outlining the logical speaking flow of the topic/notes, with a root node and 4-5 child nodes.
+7. Refine the core expressions into a quick "dry goods" (collocation, usageNote, nativeEquivalent, example) section.
+8. Formulate an oral speaking practice prompt (提问) that tests the user's ability to speak in this scene based on the notes.
+
+You MUST respond strictly in raw JSON adhering to this exact schema:
+{
+  "sceneName": "An elegant, descriptive title of the oral speaking scenario matching the note contents",
+  "category": "Daily, Business, Social, Academic, or Custom",
+  "classificationReason": "A detailed explanation in Chinese explaining why this content is semantically classified under this category",
+  "classificationScores": {
+    "Daily": 85,
+    "Business": 20,
+    "Social": 40,
+    "Academic": 10,
+    "Custom": 5
+  },
+  "thinkingChainType": "descriptive (for descriptive scenes) OR interactive (for conversational scenes)",
+  "thinkingChainDescription": "A step-by-step thinking logic chain in Chinese (e.g. 背景铺垫 -> 矛盾行动 -> 终极建议)",
+  "speakingPracticePrompt": "An engaging oral speaking prompt based directly on the extracted document notes that tests the user's active memory",
+  "expressions": [
+    {
+      "expression": "A high-frequency native collocation or phrase extracted or extended from the notes",
+      "standard": "How a textbook or Chinese-English student typically states this concept",
+      "native": "How a real native speaker expresses it naturally (地道 > 复杂)",
+      "memoryHook": "A witty, practical mnemonic (e.g., homophone, association) in Chinese to retain it forever",
+      "example": "A real-world example sentence in this scenario"
+    }
+  ],
+  "suggestedExtensions": [
+    {
+      "expression": "An advanced co-contextual collocation or phrase generated automatically that fits this specific category",
+      "standard": "Textbook style",
+      "native": "Fluent native-speaker alternative",
+      "memoryHook": "Mnemonic helper in Chinese",
+      "example": "Example sentence in context"
+    }
+  ],
+  "mindmap": {
+    "title": "Hierarchical Logic Mindmap of the Document Content",
+    "nodes": [
+      {
+        "id": "1",
+        "label": "Central Subject",
+        "details": "Core subject description",
+        "parent": null
+      },
+      {
+        "id": "2",
+        "label": "Key subconcept 1",
+        "details": "Details about subconcept 1",
+        "parent": "1"
+      }
+    ]
+  },
+  "refinedDryGoods": [
+    {
+      "collocation": "Key high-frequency collocation or idiom",
+      "usageNote": "Usage instruction or situational tip on when to say this",
+      "nativeEquivalent": "Standard colloquial phrasing",
+      "example": "A practical example sentence"
+    }
+  ]
+}
+
+The user's English level is "${personalLevel || "Intermediate"}" and their note habit is "${noteHabit || "Practical & Natural"}".
+Do not include any Markdown wrap. Output raw stringified JSON only.`;
+
+    if (isDocx) {
+      // For Word files, send extracted text
+      contents = [
+        {
+          text: `${systemPrompt}\n\nHere is the extracted text from the Word document:\n${extractedText}`,
+        },
+      ];
+    } else {
+      // For PDF and images, leverage multimodal Gemini natively
+      contents = [
+        {
+          inlineData: {
+            data: fileData,
+            mimeType: mimeType || "application/pdf",
+          },
+        },
+        {
+          text: systemPrompt,
+        },
+      ];
+    }
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: contents,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const jsonText = response.text || "{}";
+    res.json(JSON.parse(jsonText.trim()));
+  } catch (error: any) {
+    console.error("Error in analyze-document API:", error);
+    res.status(500).json({ error: error.message || "Failed to analyze document" });
   }
 });
 

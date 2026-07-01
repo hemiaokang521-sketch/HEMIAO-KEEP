@@ -18,6 +18,7 @@ export interface NoteItem {
       success: boolean;
     }>;
   };
+  tags?: string[];
 }
 
 export interface SpeakingScene {
@@ -28,6 +29,7 @@ export interface SpeakingScene {
   thinkingChainDescription: string;
   speakingPracticePrompt: string;
   isCustom?: boolean;
+  tags?: string[];
 }
 
 export interface PracticeLog {

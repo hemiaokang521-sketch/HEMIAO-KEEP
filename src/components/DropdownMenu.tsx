@@ -7,7 +7,8 @@ import {
   BookOpen, 
   Camera, 
   Mic2,
-  ChevronDown
+  ChevronDown,
+  FileText
 } from "lucide-react";
 
 interface DropdownMenuProps {
@@ -22,6 +23,7 @@ export default function DropdownMenu({ onSelectSection, activeSection }: Dropdow
     { id: "dashboard", label: "学习看板 & 记忆曲线", eng: "Dashboard & Review", icon: LayoutDashboard },
     { id: "corpus", label: "场景口语精准同境词库", eng: "Scened Corpus Library", icon: FolderHeart },
     { id: "extractor", label: "多维网址/视频提炼中心", eng: "Smart Link Extractor", icon: Link2 },
+    { id: "document", label: "文档/笔记内容多维提取中心", eng: "Document & Notes Analyzer", icon: FileText },
     { id: "notebook", label: "NotebookLM 原版书思维导图", eng: "Book Mindmap Analyzer", icon: BookOpen },
     { id: "camera", label: "随手拍场景口语识别", eng: "Camera Speech Recognizer", icon: Camera },
     { id: "speaking", label: "去模板口语实战 & Solid 反馈", eng: "Speaking Lab & Feedback", icon: Mic2 },
