@@ -33,6 +33,7 @@ export default function CameraRecognizer({
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Gemini vision output
   const [analyzedScene, setAnalyzedScene] = useState<{
@@ -171,6 +172,7 @@ export default function CameraRecognizer({
     if (!selectedImageBase64) return;
 
     setIsLoading(true);
+    setApiError(null);
     setAnalyzedScene(null);
 
     try {
@@ -184,13 +186,20 @@ export default function CameraRecognizer({
       });
 
       if (!res.ok) {
-        throw new Error("Visual analyzer backend failed.");
+        let serverErr = "Visual analyzer backend failed.";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverErr = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverErr);
       }
 
       const data = await res.json();
       setAnalyzedScene(data);
     } catch (err: any) {
-      alert("AI 图像识别失败，正在加载精细视觉口语大纲作为兜底！");
+      setApiError(err.message || "未知原因");
       
       // Resilient fallback speaking scenario based on image presets
       const fallbackResult = {
@@ -292,6 +301,20 @@ export default function CameraRecognizer({
         <div className="md:col-span-5 space-y-6">
           <div className="bg-white border border-neutral-200/50 rounded-2xl p-5 shadow-3xs space-y-4">
             
+            {apiError && (
+              <div className="bg-amber-50 border border-amber-250/70 rounded-xl p-3.5 space-y-2 animate-fadeIn text-[11px]">
+                <div className="flex items-center gap-1.5 text-amber-800 font-semibold font-serif">
+                  <span>⚠️ AI 密钥配置提示</span>
+                </div>
+                <p className="text-amber-700 leading-normal font-light">
+                  {apiError}
+                </p>
+                <div className="text-[10px] text-neutral-450 border-t border-amber-200/40 pt-1.5 mt-1 leading-normal font-light">
+                  <strong>提示:</strong> 系统已启用本地视觉口语大纲为您模拟生成词伙与大纲。您可以无障碍地体验完整的拍照分析与口语练习流程。
+                </div>
+              </div>
+            )}
+
             {/* Camera viewport frame */}
             <div className="relative aspect-[4/3] bg-neutral-950 rounded-xl overflow-hidden border border-neutral-800 flex items-center justify-center">
               

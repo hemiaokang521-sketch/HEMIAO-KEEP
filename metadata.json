@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Smart English Expression Extractor",
+  "description": "An AI-powered document, audio, and web content parser that extracts authentic collocations, functional sentences, and colloquial expression patterns for immersive English speaking practice.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

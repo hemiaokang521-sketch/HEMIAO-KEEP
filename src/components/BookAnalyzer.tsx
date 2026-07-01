@@ -27,6 +27,7 @@ export default function BookAnalyzer() {
   const [dryGoods, setDryGoods] = useState<RefinedDryGoods[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const booksList = [
     "The Art of Elegant Dialogue (对话艺术)",
@@ -37,6 +38,7 @@ export default function BookAnalyzer() {
 
   const handleAnalyze = async () => {
     setIsLoading(true);
+    setApiError(null);
     setNodes([]);
     setDryGoods([]);
     setSelectedNodeId(null);
@@ -49,7 +51,14 @@ export default function BookAnalyzer() {
       });
 
       if (!res.ok) {
-        throw new Error("Mindmap backend failed.");
+        let serverErr = "Mindmap backend failed.";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverErr = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverErr);
       }
 
       const data = await res.json();
@@ -62,7 +71,7 @@ export default function BookAnalyzer() {
         setSelectedNodeId(data.nodes[0].id);
       }
     } catch (err: any) {
-      alert("AI分析失败，正在加载精美本地原生导图作为回退保障！");
+      setApiError(err.message || "未知原因");
       
       // Bulletproof local backup for the mindmap tree
       const fallbackNodes: MindmapNode[] = [
@@ -132,6 +141,20 @@ export default function BookAnalyzer() {
         <div className="md:col-span-4 space-y-5">
           <div className="bg-white border border-neutral-200/50 rounded-2xl p-5 shadow-3xs space-y-4">
             
+            {apiError && (
+              <div className="bg-amber-50 border border-amber-250/70 rounded-xl p-3.5 space-y-2 animate-fadeIn text-[11px]">
+                <div className="flex items-center gap-1.5 text-amber-800 font-semibold font-serif">
+                  <span>⚠️ AI 密钥配置提示</span>
+                </div>
+                <p className="text-amber-700 leading-normal font-light">
+                  {apiError}
+                </p>
+                <div className="text-[10px] text-neutral-450 border-t border-amber-200/40 pt-1.5 mt-1 leading-normal font-light">
+                  <strong>提示:</strong> 系统已启用本地精美原生大纲为您模拟生成逻辑树。您可以查看导图叶节点、干货词伙、并正常练习口语。
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-[10px] font-semibold tracking-wider text-neutral-400 uppercase block mb-1.5">
                 1. 选择原版图书 (SELECT BOOK)

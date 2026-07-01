@@ -84,6 +84,9 @@ export default function CorpusLibrary({
   const [newNoteHook, setNewNoteHook] = useState("");
   const [newNoteExample, setNewNoteExample] = useState("");
   const [newNoteTagsStr, setNewNoteTagsStr] = useState("");
+  const [newNoteType, setNewNoteType] = useState<"collocation" | "sentence" | "filler" | "supplement">("collocation");
+
+  const [linguisticTypeTab, setLinguisticTypeTab] = useState<"all" | "collocation" | "sentence" | "filler" | "supplement">("all");
 
   // Batch operations state
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -271,13 +274,18 @@ export default function CorpusLibrary({
       .map(t => t.trim().replace(/^#/, ""))
       .filter(Boolean);
 
+    const typeLabel = newNoteType === "collocation" ? "核心词伙" : newNoteType === "sentence" ? "功能句型" : newNoteType === "filler" ? "语气填充词" : "AI大数据补充";
+    if (!parsedTags.includes(typeLabel)) {
+      parsedTags.push(typeLabel);
+    }
+
     const newNote: NoteItem = {
       id: `note_${Date.now()}`,
       sceneId: selectedSceneId,
       expression: newNoteExpression,
       standard: newNoteStandard,
       native: newNoteNative,
-      memoryHook: newNoteHook,
+      memoryHook: `[${typeLabel === "语气填充词" ? "语气填充" : typeLabel === "AI大数据补充" ? "AI补充" : typeLabel}] \n💡 ${newNoteHook}`,
       example: newNoteExample,
       createdAt: new Date().toISOString(),
       ebbinghaus: {
@@ -285,7 +293,8 @@ export default function CorpusLibrary({
         nextReviewDate: new Date(Date.now() + 24 * 3600 * 1000).toISOString(), // 24 hours later
         reviewHistory: []
       },
-      tags: parsedTags
+      tags: parsedTags,
+      type: newNoteType
     };
 
     onAddNote(newNote);
@@ -307,7 +316,12 @@ export default function CorpusLibrary({
   };
 
   const selectedScene = scenes.find(s => s.id === selectedSceneId);
-  const sceneNotes = notes.filter(n => n.sceneId === selectedSceneId);
+  const rawSceneNotes = notes.filter(n => n.sceneId === selectedSceneId);
+  const sceneNotes = rawSceneNotes.filter(n => {
+    if (linguisticTypeTab === "all") return true;
+    const nType = n.type || (n.tags?.includes("功能句型") ? "sentence" : (n.tags?.includes("语气填充") || n.tags?.includes("语气填充词")) ? "filler" : n.tags?.includes("AI大数据补充") ? "supplement" : "collocation");
+    return nType === linguisticTypeTab;
+  });
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-8" id="corpus-library-root">
@@ -871,6 +885,39 @@ export default function CorpusLibrary({
             </motion.div>
           )}
 
+          {/* LINGUISTIC CATEGORY TABS */}
+          <div className="flex items-center gap-1.5 bg-neutral-100/75 p-1 rounded-xl border border-neutral-200/50 overflow-x-auto">
+            {[
+              { id: "all", label: "全部 (All)", count: rawSceneNotes.length },
+              { id: "collocation", label: "核心词伙 (Collocations)", count: rawSceneNotes.filter(n => (n.type || (n.tags?.includes("功能句型") ? "sentence" : (n.tags?.includes("语气填充") || n.tags?.includes("语气填充词")) ? "filler" : n.tags?.includes("AI大数据补充") ? "supplement" : "collocation")) === "collocation").length },
+              { id: "sentence", label: "功能句型 (Sentences)", count: rawSceneNotes.filter(n => (n.type || (n.tags?.includes("功能句型") ? "sentence" : (n.tags?.includes("语气填充") || n.tags?.includes("语气填充词")) ? "filler" : n.tags?.includes("AI大数据补充") ? "supplement" : "collocation")) === "sentence").length },
+              { id: "filler", label: "语气填充词 (Fillers)", count: rawSceneNotes.filter(n => (n.type || (n.tags?.includes("功能句型") ? "sentence" : (n.tags?.includes("语气填充") || n.tags?.includes("语气填充词")) ? "filler" : n.tags?.includes("AI大数据补充") ? "supplement" : "collocation")) === "filler").length },
+              { id: "supplement", label: "AI 大数据补充 (Supplements)", count: rawSceneNotes.filter(n => (n.type || (n.tags?.includes("功能句型") ? "sentence" : (n.tags?.includes("语气填充") || n.tags?.includes("语气填充词")) ? "filler" : n.tags?.includes("AI大数据补充") ? "supplement" : "collocation")) === "supplement").length },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setLinguisticTypeTab(tab.id as any);
+                  setSelectedNoteIds([]); // reset selection when toggling tabs
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 border ${
+                  linguisticTypeTab === tab.id
+                    ? "bg-neutral-900 border-neutral-950 text-white shadow-2xs"
+                    : "bg-white text-neutral-500 border-neutral-200 hover:text-neutral-800 hover:bg-neutral-55"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold font-mono ${
+                  linguisticTypeTab === tab.id
+                    ? "bg-white/20 text-white"
+                    : "bg-neutral-100 text-neutral-500"
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
           {/* LIST OF ACCUMULATED EXPRESSIONS */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -1325,6 +1372,20 @@ export default function CorpusLibrary({
                     onChange={e => setNewNoteExpression(e.target.value)}
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-hidden focus:bg-white focus:border-neutral-400 transition-all font-light"
                   />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-neutral-400 block mb-1">语言结构类型 (LINGUISTIC TYPE):</label>
+                  <select
+                    value={newNoteType}
+                    onChange={e => setNewNoteType(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-hidden focus:bg-white transition-all font-light"
+                  >
+                    <option value="collocation">核心词伙 (Collocation)</option>
+                    <option value="sentence">功能句型 (Sentence)</option>
+                    <option value="filler">语气填充词 (Mood Filler)</option>
+                    <option value="supplement">AI 大数据补充 (Supplement)</option>
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

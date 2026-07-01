@@ -17,13 +17,16 @@ app.use(express.json({ limit: "10mb" }));
 // Lazy initializer for GoogleGenAI
 let aiInstance: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "MOCK_KEY" || apiKey === "undefined" || apiKey.trim() === "") {
+    throw new Error(
+      "GEMINI_API_KEY is not configured or is using a placeholder. Please open the Settings/Secrets panel in the AI Studio UI, add your valid Google Gemini API Key as 'GEMINI_API_KEY', and retry."
+    );
+  }
+
   if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("WARNING: GEMINI_API_KEY environment variable is not set. API calls will fail.");
-    }
     aiInstance = new GoogleGenAI({
-      apiKey: apiKey || "MOCK_KEY",
+      apiKey: apiKey,
       httpOptions: {
         headers: {
           "User-Agent": "aistudio-build",
@@ -40,7 +43,7 @@ function getGeminiClient(): GoogleGenAI {
 
 // 1. Analyze and extract content from a shared URL or simulated topic
 app.post("/api/gemini/analyze-link", async (req, res) => {
-  const { url, personalLevel, noteHabit } = req.body;
+  const { url, personalLevel, noteHabit, extractMode } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: "URL or topic is required" });
@@ -48,26 +51,91 @@ app.post("/api/gemini/analyze-link", async (req, res) => {
 
   try {
     const ai = getGeminiClient();
-    const prompt = `Analyze the target link or topic: "${url}".
+    let promptSuffix = "";
+    if (extractMode === "simple") {
+      promptSuffix = `\n\n[SIMPLE MODE ACTIVE]
+The user requested a SIMPLE EXPRESSION EXTRACTION. Under this mode:
+1. Extract only a small subset of the most critical expressions (typically 2-4 core items) and put them in the "collocations" list.
+2. Keep the "functionalSentences", "moodFillers", and "aiSupplements" lists empty (or contain at most 1 item if highly relevant).
+3. Provide a simplified, brief "communicationLogic" and "thinkingChainDescription" (e.g., 1-2 short sentences each).
+4. The main focus is quick, lightweight extraction of core terms only, rather than comprehensive full parsing.`;
+    } else {
+      promptSuffix = `\n\n[DEEP MODE ACTIVE]
+The user requested a DEEP STRUCTURED FULL EXTRACTION. You MUST perform deep grammatical breakdown, full content extraction with 100% complete coverage, detailed categorisation into core collocations, functional sentences, mood fillers, and rich AI big data supplemental expressions, and provide a thorough communication logic and structural thinking chain.`;
+    }
+
+    const prompt = `Analyze the target link, video transcription, or topic: "${url}".
 The user's English level is "${personalLevel || "Intermediate"}" and their note-taking style is "${noteHabit || "Practical & Natural"}".
-Generate a structured oral English speaking lesson based on the content. The focus must be on "底层逻辑 + 同境词" (Generic thinking logic + scene-bundled vocabulary).
+
+Your task is to:
+1. Extract EVERY single English vocabulary word, expression, phrase, collocation, or sentence structure from the target link/video/topic. Do NOT selectively filter or omit any items. Ensure 100% complete extraction so that no notes are left behind.
+2. In the "originalNotesContent" field, reconstruct and write down the COMPLETE transcribed, compiled, or extracted raw text of the link/video/topic with absolutely no omissions, so the user can verify that 100% of the content was parsed.
+3. Group the extracted items into "collocations", "functionalSentences", or "moodFillers".
+4. Generate a set of "aiSupplements": AI Big Data Supplemental Materials & Expressions (大数据口语素材补充) - additional high-frequency expressions and collocations that are highly relevant to this speaking scene but might not be in the original source, making the lesson comprehensive.
+
+For EACH expression/sentence/filler in ALL lists, you must provide:
+- expression: The English phrase/pattern/filler
+- standard: The textbook or standard literal phrasing (Chinese/English style)
+- native: The authentic native mother-tongue phrasing (地道 > 复杂)
+- chinese: The precise Chinese translation and detailed semantic explanation (标注中文)
+- memoryHook: A witty mnemonic device (homophones, association 联想, or vivid imagery) in Chinese
+- example: A practical example sentence (must contain both English and Chinese translation)
+
+Provide a thorough "communicationLogic" (特定场景下的交流逻辑) summarizing the speaking logic, delivery tricks, cultural nuances, and conversational flow in Chinese for this specific scene.
+
 Provide the response in raw JSON adhering to this exact schema:
 {
-  "sceneName": "An elegant, human-centric title of the speaking scenario",
+  "sceneName": "An elegant, descriptive title of the speaking scenario",
   "category": "Daily, Business, Social, or Academic",
-  "thinkingChainType": "descriptive (Scene Background -> Detail Actions -> Personal Feelings) OR interactive (Core Response -> Detail Supplement -> Toss back)",
-  "thinkingChainDescription": "A step-by-step guideline teaching the user how to think and structure their thoughts for this scene",
-  "expressions": [
+  "originalNotesContent": "A detailed, complete text transcription and organized raw compilation of 100% of the words, phrases, and details found in the target link, article, or video transcript, with absolutely nothing left out.",
+  "thinkingChainType": "descriptive OR interactive",
+  "thinkingChainDescription": "A step-by-step thinking logic chain in Chinese (e.g. 背景铺垫 -> 矛盾行动 -> 终极建议)",
+  "speakingPracticePrompt": "An engaging oral speaking prompt that tests active recall of these structures",
+  "communicationLogic": "A rich, detailed guide in Chinese explaining the conversational flow, communication psychology, and delivery advice for this specific口语场景",
+  "collocations": [
     {
-      "expression": "A high-frequency natural word or collocation used by native speakers",
-      "standard": "The simple, literal, or slightly Chinese-English style translation of the concept",
-      "native": "The authentic, natural mother-tongue expression (地道 > 复杂)",
-      "memoryHook": "A mnemonic device (e.g., a pun, homophone 谐音, association 联想, or vivid imagery) to easily remember it",
-      "example": "A practical example sentence in this scenario"
+      "expression": "phrase",
+      "standard": "textbook phrasing",
+      "native": "authentic native phrasing",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
     }
   ],
-  "speakingPracticePrompt": "An engaging, direct oral speaking prompt related to this scene that urges the user to record/write their response."
+  "functionalSentences": [
+    {
+      "expression": "sentence pattern",
+      "standard": "textbook phrasing",
+      "native": "authentic native phrasing",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
+    }
+  ],
+  "moodFillers": [
+    {
+      "expression": "filler word",
+      "standard": "basic usage",
+      "native": "natural native use",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
+    }
+  ],
+  "aiSupplements": [
+    {
+      "expression": "supplemental phrase",
+      "standard": "textbook phrasing",
+      "native": "authentic native phrasing",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
+    }
+  ]
 }
+
+${promptSuffix}
+
 Do not include any Markdown or formatting wraps (like \`\`\`json). Output raw stringified JSON only.`;
 
     const response = await ai.models.generateContent({
@@ -263,7 +331,7 @@ Return raw stringified JSON only. Ensure you have a central parent node and at l
 
 // 5. Intelligent Document/Image Content Extractor
 app.post("/api/gemini/analyze-document", async (req, res) => {
-  const { fileData, fileName, mimeType, personalLevel, noteHabit } = req.body;
+  const { fileData, fileName, mimeType, personalLevel, noteHabit, extractMode } = req.body;
 
   if (!fileData) {
     return res.status(400).json({ error: "File data is required" });
@@ -282,27 +350,42 @@ app.post("/api/gemini/analyze-document", async (req, res) => {
       const buffer = Buffer.from(fileData, "base64");
       const result = await mammoth.extractRawText({ buffer });
       extractedText = result.value;
+    } else if (
+      mimeType?.startsWith("text/") ||
+      (fileName && (fileName.endsWith(".txt") || fileName.endsWith(".md") || fileName.endsWith(".json") || fileName.endsWith(".csv")))
+    ) {
+      isDocx = true; // Use the text-based prompt path
+      extractedText = Buffer.from(fileData, "base64").toString("utf-8");
     }
 
     const ai = getGeminiClient();
 
     let contents: any[] = [];
 
-    const systemPrompt = `You are a professional language acquisition AI. The user has uploaded their personal note document or screenshot of English notes.
-Your task is to:
-1. Extract the main note text.
-2. Group the notes into an elegant oral English speaking scenario (Scene). Categorize it as Daily, Business, Social, Academic, or Custom.
-3. Perform semantic analysis on the content and compute a match score (0-100) for each of our preset categories: Daily, Business, Social, Academic, Custom. Provide a professional classification reason in Chinese explaining why it is assigned to the selected category.
-4. Extract key collocations/expressions from the notes and "extend" them ("延展同境词") into authentic native collocations! For each expression, provide:
-   - "expression": the natural phrase or collocation
-   - "standard": a basic, literal, or slightly unnatural textbook phrasing of this concept (e.g., "I want to buy")
-   - "native": the authentic native alternative (e.g., "Can I grab a...") (地道 > 复杂)
-   - "memoryHook": a practical, witty mnemonic device (homophones, association 联想, etc.) in Chinese to remember it easily
-   - "example": a realistic example sentence in this scenario
-5. Generate 2-3 extra, highly valuable, and advanced co-contextual collocation suggestions ("同境词扩展建议") in the same scenario/category. They should not be directly in the original notes but are high-frequency words native speakers would use in this exact same context. Provide the same structure as step 4.
-6. Organize a mindmap outlining the logical speaking flow of the topic/notes, with a root node and 4-5 child nodes.
-7. Refine the core expressions into a quick "dry goods" (collocation, usageNote, nativeEquivalent, example) section.
-8. Formulate an oral speaking practice prompt (提问) that tests the user's ability to speak in this scene based on the notes.
+    const systemPrompt = `You are a professional language acquisition AI. The user has uploaded their personal note document, PDF, or screenshot of English notes.
+Your primary goal is to organize, clean up, and consolidate ALL the English notes, vocabulary, phrases, collocations, and grammar points the user has recorded.
+
+Please adhere strictly to the following requirements:
+1. Extract EVERY single English vocabulary word, phrase, collocation, or sentence structure from the uploaded notes/file. Do NOT perform selective filtering, and do NOT truncate or skip any knowledge points. You must achieve 100% coverage and recall of all the user's past notes.
+2. Reconstruct and compile the COMPLETE transcribed/extracted raw notes, words, explanations, and textual content from the uploaded file/image with absolutely no omissions in the "originalNotesContent" field. Write it down in detail so the user can verify that 100% of their notes are preserved and processed.
+3. Group the extracted notes into an elegant oral English speaking scenario (Scene). Categorize it as Daily, Business, Social, Academic, or Custom.
+4. Perform semantic analysis on the content and compute a match score (0-100) for each of our preset categories: Daily, Business, Social, Academic, Custom. Provide a professional classification reason in Chinese explaining why it is assigned to the selected category.
+5. Categorize all extracted notes into three distinct dimensions:
+   - "collocations": Core Collocations (核心词伙) - high-frequency, authentic multi-word combinations from the notes.
+   - "functionalSentences": Functional Sentences (功能句型) - sentence structures, grammar nodes, and conversational frames from the notes.
+   - "moodFillers": Mood Filler Words (语气填充词) - filler words, discourse markers, and pragmatic fillers native speakers use to sound natural.
+6. Generate a set of "aiSupplements": AI Big Data Supplemental Materials & Expressions (大数据口语素材补充) - additional high-frequency expressions and collocations that are highly relevant to this speaking scene but might not be in the original source, making the lesson comprehensive.
+7. For EACH expression/sentence/filler in ALL lists, you must provide:
+   - expression: The English phrase/pattern/filler
+   - standard: The textbook or standard literal phrasing (Chinese/English style)
+   - native: The authentic native mother-tongue phrasing (地道 > 复杂)
+   - chinese: The precise Chinese translation and detailed semantic explanation (标注中文)
+   - memoryHook: A witty mnemonic device (homophones, association 联想, or vivid imagery) in Chinese
+   - example: A practical example sentence (must contain both English and Chinese translation)
+8. Provide a thorough "communicationLogic" (特定场景下的交流逻辑) summarizing the speaking logic, delivery tricks, cultural nuances, and conversational flow in Chinese for this specific scene.
+9. Organize a mindmap outlining the logical speaking flow of the topic/notes, with a root node and 4-5 child nodes.
+10. Refine the core expressions into a quick "refinedDryGoods" (collocation, usageNote, nativeEquivalent, example) section.
+11. Formulate an oral speaking practice prompt (提问) that tests the user's ability to speak in this scene based on the notes.
 
 You MUST respond strictly in raw JSON adhering to this exact schema:
 {
@@ -316,25 +399,49 @@ You MUST respond strictly in raw JSON adhering to this exact schema:
     "Academic": 10,
     "Custom": 5
   },
-  "thinkingChainType": "descriptive (for descriptive scenes) OR interactive (for conversational scenes)",
+  "originalNotesContent": "A detailed, complete text transcription and organized raw compilation of 100% of the words, phrases, and details found in the user's uploaded note file/image, with absolutely nothing left out.",
+  "thinkingChainType": "descriptive OR interactive",
   "thinkingChainDescription": "A step-by-step thinking logic chain in Chinese (e.g. 背景铺垫 -> 矛盾行动 -> 终极建议)",
   "speakingPracticePrompt": "An engaging oral speaking prompt based directly on the extracted document notes that tests the user's active memory",
-  "expressions": [
+  "communicationLogic": "A rich, detailed guide in Chinese explaining the conversational flow, communication psychology, and delivery advice for this specific口语场景",
+  "collocations": [
     {
-      "expression": "A high-frequency native collocation or phrase extracted or extended from the notes",
-      "standard": "How a textbook or Chinese-English student typically states this concept",
-      "native": "How a real native speaker expresses it naturally (地道 > 复杂)",
-      "memoryHook": "A witty, practical mnemonic (e.g., homophone, association) in Chinese to retain it forever",
-      "example": "A real-world example sentence in this scenario"
+      "expression": "phrase",
+      "standard": "textbook phrasing",
+      "native": "authentic native phrasing",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
     }
   ],
-  "suggestedExtensions": [
+  "functionalSentences": [
     {
-      "expression": "An advanced co-contextual collocation or phrase generated automatically that fits this specific category",
-      "standard": "Textbook style",
-      "native": "Fluent native-speaker alternative",
-      "memoryHook": "Mnemonic helper in Chinese",
-      "example": "Example sentence in context"
+      "expression": "sentence pattern",
+      "standard": "textbook phrasing",
+      "native": "authentic native phrasing",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
+    }
+  ],
+  "moodFillers": [
+    {
+      "expression": "filler word",
+      "standard": "basic usage",
+      "native": "natural native use",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
+    }
+  ],
+  "aiSupplements": [
+    {
+      "expression": "supplemental phrase",
+      "standard": "textbook phrasing",
+      "native": "authentic native phrasing",
+      "chinese": "Chinese translation",
+      "memoryHook": "witty hook in Chinese",
+      "example": "example sentence (English + Chinese translation)"
     }
   ],
   "mindmap": {
@@ -364,14 +471,24 @@ You MUST respond strictly in raw JSON adhering to this exact schema:
   ]
 }
 
+${extractMode === "simple" ? `
+[SIMPLE MODE ACTIVE]
+The user requested a SIMPLE EXPRESSION EXTRACTION. Under this mode:
+1. Extract only a small subset of the most critical expressions (typically 2-4 core items) and put them in the "collocations" list.
+2. Keep the "functionalSentences", "moodFillers", and "aiSupplements" lists empty (or contain at most 1 item if highly relevant).
+3. Provide a simplified, brief "communicationLogic" and "thinkingChainDescription" (e.g., 1-2 short sentences each).
+4. The main focus is quick, lightweight extraction of core terms only, rather than comprehensive full parsing.` : `
+[DEEP MODE ACTIVE]
+The user requested a DEEP STRUCTURED FULL EXTRACTION. You MUST perform deep grammatical breakdown, full content extraction with 100% complete coverage, detailed categorisation into core collocations, functional sentences, mood fillers, and rich AI big data supplemental expressions, and provide a thorough communication logic and structural thinking chain.`}
+
 The user's English level is "${personalLevel || "Intermediate"}" and their note habit is "${noteHabit || "Practical & Natural"}".
 Do not include any Markdown wrap. Output raw stringified JSON only.`;
 
     if (isDocx) {
-      // For Word files, send extracted text
+      // For Word files and plain text files, send extracted text
       contents = [
         {
-          text: `${systemPrompt}\n\nHere is the extracted text from the Word document:\n${extractedText}`,
+          text: `${systemPrompt}\n\nHere is the extracted text from the source note document:\n${extractedText}`,
         },
       ];
     } else {

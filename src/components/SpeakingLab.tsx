@@ -43,6 +43,7 @@ export default function SpeakingLab({
   const [userAnswer, setUserAnswer] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showWaves, setShowWaves] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Active review result state
   const [activeFeedback, setActiveFeedback] = useState<{
@@ -377,6 +378,7 @@ export default function SpeakingLab({
 
     setIsLoading(true);
     setShowWaves(true);
+    setApiError(null);
     setActiveFeedback(null);
 
     try {
@@ -391,7 +393,14 @@ export default function SpeakingLab({
       });
 
       if (!res.ok) {
-        throw new Error("Speaking Feedback backend failed.");
+        let serverErr = "Speaking Feedback backend failed.";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverErr = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverErr);
       }
 
       const data = await res.json();
@@ -414,7 +423,7 @@ export default function SpeakingLab({
       onAddPracticeLog(newLog);
 
     } catch (err: any) {
-      alert("AI 评估遇到了一点拥堵，已为您启用本地精细语法引擎生成反馈！");
+      setApiError(err.message || "未知原因");
       
       // Fully styled, realistic fallback evaluation feedback
       const simulatedExpressionsUsed = sceneNotes.map(note => {
@@ -504,6 +513,20 @@ export default function SpeakingLab({
           {/* Form container */}
           <form onSubmit={handleSubmitAnswer} className="bg-white border border-neutral-200/50 rounded-2xl p-5 shadow-3xs space-y-5">
             
+            {apiError && (
+              <div className="bg-amber-50 border border-amber-250/70 rounded-xl p-3.5 space-y-2 animate-fadeIn text-[11px]">
+                <div className="flex items-center gap-1.5 text-amber-800 font-semibold font-serif">
+                  <span>⚠️ AI 密钥配置提示</span>
+                </div>
+                <p className="text-amber-700 leading-normal font-light">
+                  {apiError}
+                </p>
+                <div className="text-[10px] text-neutral-450 border-t border-amber-200/40 pt-1.5 mt-1 leading-normal font-light">
+                  <strong>提示:</strong> 系统已启用本地精细语法引擎为您进行口语评估。您仍能正常查看到多维度的修正建议与评分。
+                </div>
+              </div>
+            )}
+
             {/* Scene Selector */}
             <div>
               <label className="text-[10px] font-semibold tracking-wider text-neutral-400 uppercase block mb-1.5">

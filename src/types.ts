@@ -19,6 +19,7 @@ export interface NoteItem {
     }>;
   };
   tags?: string[];
+  type?: "collocation" | "sentence" | "filler" | "supplement";
 }
 
 export interface SpeakingScene {
