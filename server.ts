@@ -43,7 +43,7 @@ function getGeminiClient(): GoogleGenAI {
 
 // 1. Analyze and extract content from a shared URL or simulated topic
 app.post("/api/gemini/analyze-link", async (req, res) => {
-  const { url, personalLevel, noteHabit, extractMode } = req.body;
+  const { url } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: "URL or topic is required" });
@@ -51,28 +51,17 @@ app.post("/api/gemini/analyze-link", async (req, res) => {
 
   try {
     const ai = getGeminiClient();
-    let promptSuffix = "";
-    if (extractMode === "simple") {
-      promptSuffix = `\n\n[SIMPLE MODE ACTIVE]
-The user requested a SIMPLE EXPRESSION EXTRACTION. Under this mode:
-1. Extract only a small subset of the most critical expressions (typically 2-4 core items) and put them in the "collocations" list.
-2. Keep the "functionalSentences", "moodFillers", and "aiSupplements" lists empty (or contain at most 1 item if highly relevant).
-3. Provide a simplified, brief "communicationLogic" and "thinkingChainDescription" (e.g., 1-2 short sentences each).
-4. The main focus is quick, lightweight extraction of core terms only, rather than comprehensive full parsing.`;
-    } else {
-      promptSuffix = `\n\n[DEEP MODE ACTIVE]
-The user requested a DEEP STRUCTURED FULL EXTRACTION. You MUST perform deep grammatical breakdown, full content extraction with 100% complete coverage, detailed categorisation into core collocations, functional sentences, mood fillers, and rich AI big data supplemental expressions, and provide a thorough communication logic and structural thinking chain.`;
-    }
+    const promptSuffix = `\n\n[DEEP MODE ACTIVE]
+You MUST perform deep grammatical breakdown, full content extraction with 100% complete coverage, detailed categorisation into core collocations, functional sentences, mood fillers, and rich AI big data supplemental expressions, and provide a thorough communication logic and structural thinking chain.`;
 
     const prompt = `Analyze the target link, video transcription, or topic: "${url}".
-The user's English level is "${personalLevel || "Intermediate"}" and their note-taking style is "${noteHabit || "Practical & Natural"}".
 
 Your task is to:
 1. Extract EVERY single English vocabulary word, expression, phrase, collocation, or sentence structure from the target link/video/topic. Do NOT selectively filter or omit any items. Ensure 100% complete extraction so that no notes are left behind.
 2. In the "originalNotesContent" field, reconstruct and write down the COMPLETE transcribed, compiled, or extracted raw text of the link/video/topic with absolutely no omissions, so the user can verify that 100% of the content was parsed.
 3. Group the extracted items into "collocations", "functionalSentences", or "moodFillers".
 4. Generate a set of "aiSupplements": AI Big Data Supplemental Materials & Expressions (大数据口语素材补充) - additional high-frequency expressions and collocations that are highly relevant to this speaking scene but might not be in the original source, making the lesson comprehensive.
-
+ 
 For EACH expression/sentence/filler in ALL lists, you must provide:
 - expression: The English phrase/pattern/filler
 - standard: The textbook or standard literal phrasing (Chinese/English style)
@@ -331,7 +320,7 @@ Return raw stringified JSON only. Ensure you have a central parent node and at l
 
 // 5. Intelligent Document/Image Content Extractor
 app.post("/api/gemini/analyze-document", async (req, res) => {
-  const { fileData, fileName, mimeType, personalLevel, noteHabit, extractMode } = req.body;
+  const { fileData, fileName, mimeType } = req.body;
 
   if (!fileData) {
     return res.status(400).json({ error: "File data is required" });
@@ -471,17 +460,9 @@ You MUST respond strictly in raw JSON adhering to this exact schema:
   ]
 }
 
-${extractMode === "simple" ? `
-[SIMPLE MODE ACTIVE]
-The user requested a SIMPLE EXPRESSION EXTRACTION. Under this mode:
-1. Extract only a small subset of the most critical expressions (typically 2-4 core items) and put them in the "collocations" list.
-2. Keep the "functionalSentences", "moodFillers", and "aiSupplements" lists empty (or contain at most 1 item if highly relevant).
-3. Provide a simplified, brief "communicationLogic" and "thinkingChainDescription" (e.g., 1-2 short sentences each).
-4. The main focus is quick, lightweight extraction of core terms only, rather than comprehensive full parsing.` : `
 [DEEP MODE ACTIVE]
-The user requested a DEEP STRUCTURED FULL EXTRACTION. You MUST perform deep grammatical breakdown, full content extraction with 100% complete coverage, detailed categorisation into core collocations, functional sentences, mood fillers, and rich AI big data supplemental expressions, and provide a thorough communication logic and structural thinking chain.`}
+You MUST perform a deep grammatical breakdown and 100% complete full content extraction of all expressions and notes in the document/image. Categorize them into core collocations, functional sentences, mood fillers, and rich AI big data supplemental expressions, and provide a thorough communication logic guide and structural thinking chain.
 
-The user's English level is "${personalLevel || "Intermediate"}" and their note habit is "${noteHabit || "Practical & Natural"}".
 Do not include any Markdown wrap. Output raw stringified JSON only.`;
 
     if (isDocx) {

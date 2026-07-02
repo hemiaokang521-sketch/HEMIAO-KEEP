@@ -698,92 +698,15 @@ export default function DocExtractor({ onAddScene, onAddNote, onDirectToPractice
               )}
             </div>
 
-            {/* 2. English Level Option */}
-            <div>
-              <label className="text-[10px] font-semibold tracking-wider text-neutral-400 uppercase block mb-1.5">
-                2. 设定目标英语水平 (ENGLISH LEVEL)
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {["Beginner (初级)", "Intermediate (中级)", "Advanced (高级)"].map(lvl => (
-                  <button
-                    key={lvl}
-                    type="button"
-                    onClick={() => setPersonalLevel(lvl)}
-                    className={`py-2 px-1 text-center rounded-lg text-[10px] font-medium border transition-all cursor-pointer ${
-                      personalLevel === lvl 
-                        ? "bg-neutral-900 border-neutral-950 text-white shadow-2xs" 
-                        : "bg-neutral-50/50 border-neutral-200 hover:bg-neutral-100 text-neutral-500"
-                     }`}
-                  >
-                    {lvl.split(" ")[0]}
-                  </button>
-                ))}
+            {/* Unified Full-Fidelity Extraction Explanation */}
+            <div className="bg-indigo-50/40 border border-indigo-100/40 rounded-xl p-4 space-y-2 animate-fadeIn text-[11px]">
+              <div className="flex items-center gap-1.5 text-indigo-800 font-semibold font-serif">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+                <span>⚙️ 纯粹全量口语提炼引擎</span>
               </div>
-            </div>
-
-            {/* 3. Notes Habit Preference */}
-            <div>
-              <label className="text-[10px] font-semibold tracking-wider text-neutral-400 uppercase block mb-1.5">
-                3. 口语表达偏好 (HABITS)
-              </label>
-              <select
-                value={noteHabit}
-                onChange={e => setNoteHabit(e.target.value)}
-                className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-hidden focus:bg-white transition-all font-light"
-              >
-                <option value="Practical & Natural (地道高频优先)">地道日常口语化 (Practical & Fluid)</option>
-                <option value="Professional Business (商务高级风)">精英职场汇报 (Professional & Sharp)</option>
-                <option value="Academic Expressions (学术严谨风)">学术辩论陈述 (Logical & Academic)</option>
-              </select>
-            </div>
-
-            {/* Parsing Mode Toggle and Hint Banner */}
-            <div className="bg-indigo-50/30 border border-indigo-100/50 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold tracking-wider text-indigo-800 uppercase block">
-                  ⚙️ 智能解析模式 (PARSING MODE)
-                </span>
-                <div className="flex items-center gap-1.5 bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
-                  <button
-                    type="button"
-                    onClick={() => setExtractMode("simple")}
-                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all cursor-pointer ${
-                      extractMode === "simple"
-                        ? "bg-white text-indigo-600 shadow-3xs"
-                        : "text-neutral-450 hover:text-neutral-700"
-                    }`}
-                  >
-                    简单词伙
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExtractMode("deep")}
-                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all cursor-pointer ${
-                      extractMode === "deep"
-                        ? "bg-white text-indigo-600 shadow-3xs"
-                        : "text-neutral-455 hover:text-neutral-700"
-                    }`}
-                  >
-                    全量深度
-                  </button>
-                </div>
-              </div>
-              
-              {extractMode === "deep" ? (
-                <div className="text-[11px] text-indigo-700 leading-normal flex items-start gap-1 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/30 animate-fadeIn">
-                  <span className="text-indigo-600 font-bold">✨</span>
-                  <p>
-                    当前解析模式已调至：<strong>深度结构化全量解析</strong>。AI 将对上传内容进行 100% 深度语法拆解，自动归纳出：核心词伙、功能句型、语气填充词及 AI 补充表达，并输出特定的交流场景逻辑。
-                  </p>
-                </div>
-              ) : (
-                <div className="text-[11px] text-neutral-500 leading-normal flex items-start gap-1 p-2 rounded-lg bg-neutral-50 border border-neutral-100 animate-fadeIn">
-                  <span className="text-neutral-400 font-bold">💡</span>
-                  <p>
-                    当前已切换为：<strong>简单词伙提取模式</strong>。AI 将跳过复杂的全量解构与场景思考链，只为您快速提炼出几个核心口语词伙以供日常复习。
-                  </p>
-                </div>
-              )}
+              <p className="text-indigo-700 leading-normal font-light">
+                系统已升级为<strong>全量深度解析模式</strong>。我们将直接对您上传的文档或截图进行 100% 完整的知识点提取与重构，完整归纳出地道核心词伙、功能句型、语气填充词和 AI 大数据补充。
+              </p>
             </div>
 
             {/* 4. Action Button */}

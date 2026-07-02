@@ -172,10 +172,191 @@ export default function CorpusLibrary({
     new Set(scenes.flatMap(scene => scene.tags || []))
   ).filter(Boolean);
 
+  // Helper: check search matching reason to display matching badges later
+  const getSearchMatchReason = (scene: SpeakingScene, query: string) => {
+    if (!query) return null;
+    const q = query.toLowerCase().trim();
+
+    // 1. Direct match on scene name
+    if (scene.name.toLowerCase().includes(q)) {
+      return {
+        type: "name",
+        label: "场景名",
+        text: scene.name
+      };
+    }
+
+    // 2. Direct match on thinking chain (logical structure)
+    if (scene.thinkingChainDescription.toLowerCase().includes(q)) {
+      return {
+        type: "logic",
+        label: "逻辑结构",
+        text: scene.thinkingChainDescription
+      };
+    }
+
+    // 3. Direct match on scene tags
+    const matchedTag = scene.tags?.find(tag => tag.toLowerCase().includes(q));
+    if (matchedTag) {
+      return {
+        type: "tag",
+        label: "场景标签",
+        text: `#${matchedTag}`
+      };
+    }
+
+    // 4. Match on corresponding expressions/notes (地道表达, standard, memory hook, example, etc.)
+    const sceneNotes = notes.filter(n => n.sceneId === scene.id);
+    for (const note of sceneNotes) {
+      if (note.expression.toLowerCase().includes(q) || note.native.toLowerCase().includes(q)) {
+        return {
+          type: "note",
+          label: "地道表达",
+          text: `"${note.native}" (${note.expression})`
+        };
+      }
+      if (note.standard.toLowerCase().includes(q) || (note.memoryHook && note.memoryHook.toLowerCase().includes(q)) || (note.example && note.example.toLowerCase().includes(q))) {
+        return {
+          type: "note_detail",
+          label: "释义例句",
+          text: `"${note.native}"`
+        };
+      }
+    }
+
+    // 5. Intelligent Scenario Synonyms mappings
+    if (q.includes("谈判") || q.includes("商务") || q.includes("洽谈") || q.includes("negotiat") || q.includes("business")) {
+      if (scene.category === "Business" || scene.name.includes("商务") || scene.name.includes("谈判")) {
+        return {
+          type: "synonym",
+          label: "特定的交流场景 (商务谈判)",
+          text: scene.name
+        };
+      }
+    }
+
+    if (q.includes("寒暄") || q.includes("日常") || q.includes("闲聊") || q.includes("gree") || q.includes("small talk")) {
+      if (scene.category === "Daily" || scene.category === "Social" || scene.name.includes("寒暄") || scene.name.includes("日常")) {
+        return {
+          type: "synonym",
+          label: "特定的交流场景 (日常寒暄)",
+          text: scene.name
+        };
+      }
+    }
+
+    if (q.includes("安抚") || q.includes("情绪") || q.includes("安慰") || q.includes("empath") || q.includes("comfort")) {
+      if (scene.name.includes("情绪") || scene.name.includes("安抚") || scene.name.includes("同理") || scene.name.includes("安慰") || scene.thinkingChainDescription.includes("情绪")) {
+        return {
+          type: "synonym",
+          label: "特定的交流场景 (情绪安抚)",
+          text: scene.name
+        };
+      }
+    }
+
+    return null;
+  };
+
+  const matchesScenario = (scene: SpeakingScene, query: string): boolean => {
+    if (!query) return true;
+    const q = query.toLowerCase().trim();
+
+    // 1. Direct match on scene name or category
+    if (scene.name.toLowerCase().includes(q) || scene.category.toLowerCase().includes(q)) {
+      return true;
+    }
+
+    // 2. Direct match on thinking chain / logical structure description
+    if (scene.thinkingChainDescription.toLowerCase().includes(q)) {
+      return true;
+    }
+
+    // 3. Direct match on scene tags
+    if (scene.tags && scene.tags.some(tag => tag.toLowerCase().includes(q))) {
+      return true;
+    }
+
+    // 4. Match on corresponding expressions/notes (地道表达, standard, memory hook, example, etc.)
+    const sceneNotes = notes.filter(n => n.sceneId === scene.id);
+    const matchesNotes = sceneNotes.some(note => 
+      note.expression.toLowerCase().includes(q) ||
+      note.standard.toLowerCase().includes(q) ||
+      note.native.toLowerCase().includes(q) ||
+      (note.memoryHook && note.memoryHook.toLowerCase().includes(q)) ||
+      (note.example && note.example.toLowerCase().includes(q)) ||
+      (note.tags && note.tags.some(t => t.toLowerCase().includes(q)))
+    );
+    if (matchesNotes) {
+      return true;
+    }
+
+    // 5. Intelligent Scenario / Communications synonym expansion mapping (交流场景智能映射)
+    // 5.1 商务谈判
+    if (q.includes("谈判") || q.includes("商务") || q.includes("洽谈") || q.includes("negotiat") || q.includes("business")) {
+      if (
+        scene.category === "Business" ||
+        scene.name.includes("商务") ||
+        scene.name.includes("谈判") ||
+        scene.name.includes("协商") ||
+        scene.name.includes("汇报") ||
+        scene.tags?.some(t => t.toLowerCase().includes("谈判") || t.toLowerCase().includes("business") || t.toLowerCase().includes("work"))
+      ) {
+        return true;
+      }
+    }
+
+    // 5.2 日常寒暄
+    if (q.includes("寒暄") || q.includes("日常") || q.includes("闲聊") || q.includes("gree") || q.includes("small talk") || q.includes("casual")) {
+      if (
+        scene.category === "Daily" ||
+        scene.category === "Social" ||
+        scene.name.includes("寒暄") ||
+        scene.name.includes("日常") ||
+        scene.name.includes("聊天") ||
+        scene.name.includes("聚会") ||
+        scene.tags?.some(t => t.toLowerCase().includes("寒暄") || t.toLowerCase().includes("social") || t.toLowerCase().includes("daily"))
+      ) {
+        return true;
+      }
+    }
+
+    // 5.3 情绪安抚
+    if (q.includes("安抚") || q.includes("情绪") || q.includes("安慰") || q.includes("同理") || q.includes("empath") || q.includes("comfort") || q.includes("support")) {
+      if (
+        scene.name.includes("情绪") ||
+        scene.name.includes("安抚") ||
+        scene.name.includes("同理") ||
+        scene.name.includes("安慰") ||
+        scene.name.includes("倾听") ||
+        scene.thinkingChainDescription.includes("情绪") ||
+        scene.thinkingChainDescription.includes("安慰") ||
+        scene.tags?.some(t => t.toLowerCase().includes("情绪") || t.toLowerCase().includes("empathy") || t.toLowerCase().includes("support"))
+      ) {
+        return true;
+      }
+    }
+
+    // 5.4 学术交流
+    if (q.includes("学术") || q.includes("科研") || q.includes("讨论") || q.includes("辩论") || q.includes("academ") || q.includes("discuss") || q.includes("research")) {
+      if (
+        scene.category === "Academic" ||
+        scene.name.includes("学术") ||
+        scene.name.includes("探讨") ||
+        scene.name.includes("论文") ||
+        scene.tags?.some(t => t.toLowerCase().includes("学术") || t.toLowerCase().includes("academic"))
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   // Filter scenes by category and tags
   const filteredScenes = scenes.filter(scene => {
     const matchesTab = activeTab === "All" || scene.category === activeTab;
-    const matchesSearch = scene.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesScenario(scene, searchQuery);
     const matchesTag = !selectedTag || (scene.tags && scene.tags.includes(selectedTag));
     return matchesTab && matchesSearch && matchesTag;
   });
@@ -600,17 +781,45 @@ export default function CorpusLibrary({
           {/* SEARCH & FILTERS */}
           <div className="space-y-3.5">
             <div className="flex flex-col sm:flex-row items-center gap-3.5">
-              {/* Search Input */}
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                <input
-                  type="text"
-                  placeholder="搜索口语场景..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-neutral-100/60 hover:bg-neutral-100 border border-neutral-200/40 rounded-xl text-[12px] focus:outline-hidden focus:ring-1 focus:ring-neutral-400 focus:bg-white transition-all font-light"
-                  id="scene-search"
-                />
+              {/* Search Input with Quick Scenario Recommendations */}
+              <div className="flex flex-col gap-1.5 w-full sm:w-80">
+                <div className="relative w-full">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <input
+                    type="text"
+                    placeholder="搜索场景、逻辑或地道表达..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-neutral-100/60 hover:bg-neutral-100 border border-neutral-200/40 rounded-xl text-[12px] focus:outline-hidden focus:ring-1 focus:ring-neutral-400 focus:bg-white transition-all font-light"
+                    id="scene-search"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-400">
+                  <span className="shrink-0 font-light">💡 推荐场景检索:</span>
+                  {[
+                    { label: "商务谈判 💼", q: "商务谈判" },
+                    { label: "日常寒暄 ☕", q: "日常寒暄" },
+                    { label: "情绪安抚 🌸", q: "情绪安抚" }
+                  ].map(sc => (
+                    <button
+                      key={sc.label}
+                      type="button"
+                      onClick={() => setSearchQuery(sc.q)}
+                      className="px-1.5 py-0.5 rounded-md bg-neutral-100/80 hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer text-[10px]"
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="text-indigo-600 hover:underline cursor-pointer font-mono font-medium"
+                    >
+                      [清除]
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Category Tabs */}
@@ -717,6 +926,19 @@ export default function CorpusLibrary({
                         ))}
                       </div>
                     )}
+
+                    {searchQuery && (() => {
+                      const match = getSearchMatchReason(scene, searchQuery);
+                      if (match) {
+                        return (
+                          <div className="mt-2.5 p-2 bg-amber-50/60 border border-amber-200/40 rounded-xl text-[10px] text-amber-900 animate-fadeIn flex items-start gap-1">
+                            <span className="font-semibold shrink-0">✨ 匹配{match.label}:</span>
+                            <span className="font-light line-clamp-1">{match.text}</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-neutral-100 flex items-center justify-between text-[11px] text-neutral-400">
