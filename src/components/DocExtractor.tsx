@@ -170,6 +170,26 @@ export default function DocExtractor({ onAddScene, onAddNote, onDirectToPractice
     const timer3 = setTimeout(() => setLoadingStep(3), 5500);
 
     try {
+      let text = "";
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext === "pdf") {
+        const pdfjs = await import("pdfjs-dist");
+        const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+        (pdfjs as any).GlobalWorkerOptions.workerSrc = worker.default;
+        const pdf = await (pdfjs as any).getDocument({ data: await file.arrayBuffer() }).promise;
+        for (let n=1;n<=pdf.numPages;n++) { const page=await pdf.getPage(n); const c=await page.getTextContent(); text += c.items.map((x:any)=>x.str).join(" ")+"\n"; }
+      } else if (ext === "docx") {
+        const mammoth = await import("mammoth");
+        const r = await (mammoth as any).extractRawText({arrayBuffer: await file.arrayBuffer()}); text=r.value;
+      } else { text=await file.text(); }
+      if (!text.trim()) throw new Error("没有读取到可复制的文字；扫描版 PDF 需要 OCR。");
+      const lines=text.split(/\n+/).map(x=>x.trim()).filter(Boolean).slice(0,80);
+      const expressions=lines.map(x=>({expression:x,standard:x,native:x,memoryHook:"来自原文件",example:x}));
+      const data:any={sceneName:file.name.replace(/\.[^.]+$/,""),category:"Custom",thinkingChainType:"descriptive",thinkingChainDescription:"本地读取",speakingPracticePrompt:"请根据原文练习表达。",expressions,mindmap:{title:file.name,nodes:[]},refinedDryGoods:[],originalNotesContent:text};
+      setExtractedData(data); setSelectedCategory("Custom"); setIsClassificationStepActive(true); setLoadingStep(3); return;
+    } catch (err:any) { setApiError(err.message || "读取失败"); return; }
+
+    try {
       // Read file to base64
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve, reject) => {
